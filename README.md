@@ -1,2 +1,2 @@
-# omniverse-in-60s
-Tutorials on Omniverse
+# one-minute-omniverse
+Tutorials and tricks about Omniverse
