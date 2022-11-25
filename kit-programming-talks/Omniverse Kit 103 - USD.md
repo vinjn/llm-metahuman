@@ -1,12 +1,13 @@
 # Omniverse 开发入门 ——理解 USD
-vincentz@nvidia.com
+
+Vinjn 张静
 2022-Nov
 
 
 
 [toc]
 
-# USD
+# 什么是 USD？
 
 - USD = Universal Scene Description, 不是美元 $
 - 由 Pixar 发明，以优化影视特效行业的生产流程，被 NVIDIA 采纳作为 Omniverse 的核心组件。
@@ -24,4 +25,3 @@ vincentz@nvidia.com
 
 - 引用外部 USD
 - `omni.kit.usda_edit` 插件
-- Create 和 Code 协同
