@@ -1,4 +1,4 @@
-# Omniverse 入门 ——理解 Extension
+# Omniverse 开发入门 ——理解 Extension
 vincentz@nvidia.com
 2022-Nov
 
@@ -16,6 +16,13 @@ vincentz@nvidia.com
 自定义版
 
 - https://github.com/vinjn/kit-extension-template
+
+# 调试
+
+- 推荐安装 [VS Code](https://code.visualstudio.com/)
+- 启用插件 `omni.kit.debug.vscode`
+- 在 VS Code 中按 F5，选择 `Attach to Kit`
+- 在 Kit 中观察连接情况
 
 
 

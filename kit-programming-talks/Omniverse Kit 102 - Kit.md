@@ -1,4 +1,4 @@
-# Omniverse 入门 ——理解 Kit
+# Omniverse 开发入门 ——理解 Kit
 vincentz@nvidia.com
 2022-Nov
 

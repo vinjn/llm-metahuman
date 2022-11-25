@@ -1,4 +1,4 @@
-# Omniverse 入门 ——理解 USD
+# Omniverse 开发入门 ——理解 USD
 vincentz@nvidia.com
 2022-Nov
 

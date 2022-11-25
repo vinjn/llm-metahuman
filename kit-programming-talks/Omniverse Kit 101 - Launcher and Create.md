@@ -1,4 +1,4 @@
-# Omniverse 入门 ——下载及使用
+# Omniverse 开发入门 ——从软件的下载说起
 vincentz@nvidia.com
 2022-Nov
 
@@ -7,8 +7,9 @@ vincentz@nvidia.com
 [toc]
 
 
+# 开场视频
 
-https://developer.nvidia.com/nvidia-omniverse-developer-resource-center
+[Omniverse 作品秀 - SIGGRAPH 2022 版](https://www.bilibili.com/video/BV1ZU4y1k7oY/?vd_source=cc3aa8cb55d80418662aa4c3d52dfc17)
 
 # 什么是 Omniverse？
 
