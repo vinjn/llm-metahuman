@@ -64,7 +64,7 @@ launch.json
 # 课件及代码分享
 
 - 课件：https://github.com/vinjn/one-minute-omniverse/tree/main/kit-programming-talks
-- 爆炸图插件：https://github.com/vinjn/one-minute-omniverse/tree/main/exploded-view-extension
+- 爆炸图插件：https://github.com/vinjn/one-minute-omniverse/tree/main/exploded-view-extension-final
 
 
 
