@@ -52,9 +52,9 @@ class MyExtension(omni.ext.IExt):
                         center[2] = (aabb_min.z + aabb_max.z) / 2
                         
                         trans = Gf.Vec3d()
-                        trans[0] = center[0] * 1.5
-                        trans[1] = center[1] * 1.5
-                        trans[2] = center[2] * 1.5
+                        trans[0] = center[0] * self._scale_x.model.get_value_as_float()
+                        trans[1] = center[1] * self._scale_y.model.get_value_as_float()
+                        trans[2] = center[2] * self._scale_z.model.get_value_as_float()
                         omni.kit.commands.execute("TransformPrimSRTCommand", path=prim_path, new_translation=trans)
 
                         
@@ -71,6 +71,10 @@ class MyExtension(omni.ext.IExt):
                 on_reset()
 
                 with ui.HStack():
+                    with ui.VStack():
+                        self._scale_x = ui.FloatSlider(min=0, max=2)
+                        self._scale_y = ui.FloatSlider(min=0, max=2)
+                        self._scale_z = ui.FloatSlider(min=0, max=2)
                     ui.Button("Explode", clicked_fn=on_explode)
                     ui.Button("Reset", clicked_fn=on_reset)
 
