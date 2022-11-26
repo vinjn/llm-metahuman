@@ -12,7 +12,14 @@ Vinjn 张静
 - USD = Universal Scene Description, 不是美元 $
 - 由 Pixar 发明，以优化影视特效行业的生产流程，被 NVIDIA 采纳作为 Omniverse 的核心组件。
 - USD 是 Omniverse 最重要的场景格式，除此之外它还包含一个动态运行库（包含 C++ 和 Python）。
-- [更多 USD 教程](https://graphics.pixar.com/usd/release/dl_downloads.html)
+
+# 关键概念
+
+- *.usd / *.usda / *.usdc
+- Stage
+- Prim
+- Attribute
+- Layer vs reference
 
 # UsdView
 
@@ -25,3 +32,8 @@ Vinjn 张静
 
 - 引用外部 USD
 - `omni.kit.usda_edit` 插件
+
+# 更多阅读资料
+
+- [Pixar USD 教程](https://graphics.pixar.com/usd/release/dl_downloads.html)
+- [Houdini USD 教程](https://www.sidefx.com/docs/houdini/solaris/usd.html#usd)

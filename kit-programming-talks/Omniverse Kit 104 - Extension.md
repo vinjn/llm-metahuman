@@ -40,8 +40,9 @@ launch.json
 
 文档
 
-- [Omniverse Kit Python Snippets](https://docs.omniverse.nvidia.com/prod_kit/prod_kit/python-snippets.html)
-- [Universal Scene Description Python Snippets](https://docs.omniverse.nvidia.com/prod_usd/prod_usd/python-snippets.html)
+- [Kit 常用代码](https://docs.omniverse.nvidia.com/prod_kit/prod_kit/python-snippets.html)
+- [USD 常用代码 1](https://docs.omniverse.nvidia.com/prod_usd/prod_usd/python-snippets.html)
+- [USD 常用代码 2](https://docs.omniverse.nvidia.com/prod_usd/prod_usd/quick-start/api.html)
 
 # 调试
 
