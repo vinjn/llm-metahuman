@@ -106,10 +106,12 @@ def predict(message, history):
     if message == "setup":
         a2f_setup()
         yield "A2F setup"
+        return
 
     if message == "redo":
         a2f_player_play()
         yield "A2F redo"
+        return
 
     history_openai_format = []
     for human, assistant in history:
@@ -117,22 +119,24 @@ def predict(message, history):
         history_openai_format.append({"role": "assistant", "content": assistant})
     history_openai_format.append({"role": "user", "content": message})
 
-    print("chat request")
     response = client.chat.completions.create(
         model="gpt-3.5-turbo",
         messages=history_openai_format,
         temperature=1.0,
         stream=False,
     )
-
-    print("chat response")
+    yield "chat completed"
 
     if len(response.choices[0].message.content) != 0:
         answer = response.choices[0].message.content
         audio_file = text_to_audio(answer)
+        yield "audio completed"
 
         a2f_player_settrack(audio_file)
+        yield "a2f_player_settrack"
+
         a2f_player_play()
+        yield "a2f_player_play"
 
         yield answer
 
