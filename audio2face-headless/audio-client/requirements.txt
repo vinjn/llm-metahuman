@@ -1,0 +1,4 @@
+openai
+pydub
+gradio
+requests
