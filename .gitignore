@@ -135,3 +135,4 @@ _*/
 *.usd
 *.mp4
 *.download
+audio2face-headless/audio-client/litellm_uuid.txt
