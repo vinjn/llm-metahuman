@@ -5,6 +5,8 @@ import requests
 import os
 from litellm import completion
 import time
+import threading
+import queue
 
 # XXX: increase requests speed
 # https://stackoverflow.com/a/72440253
@@ -19,6 +21,7 @@ chat_model = "gpt"
 # chat_model = "llama2"
 CHAT_MODEL_NAME = "gpt-3.5-turbo"
 CHAT_BASE_URL = None
+CHAT_STREAMING = True
 
 if chat_model == "llama2":
     CHAT_MODEL_NAME = "ollama/llama2"
@@ -61,40 +64,47 @@ def text_to_mp3(text):
         voice=voice,
         input=text,
     )
-    response.stream_to_file(f"{voice}-output.mp3")
+    timestamp = time.time()
+    mp3_filename = f"{timestamp}.mp3"
+    response.stream_to_file(mp3_filename)
 
-    return f"{voice}-output.mp3"
+    return mp3_filename
 
 
 @timing_decorator
 def mp3_to_wav(mp3_filename):
     sound = AudioSegment.from_mp3(mp3_filename)
     sound = sound.set_frame_rate(22050)
-    sound.export(f"{voice}-output.wav", format="wav")
+    wav_filename = f"{mp3_filename}.wav"
+    sound.export(wav_filename, format="wav")
 
-    return f"{voice}-output.wav"
+    return wav_filename
 
 
 @timing_decorator
 def a2f_post(end_point, data=None):
-    print(f"[[ {end_point}")
+    print(f"++ {end_point}")
     api_url = f"{A2F_BASE_URL}/{end_point}"
     response = requests.post(api_url, json=data)
     if response.status_code == 200:
         print(response.json())
+        return response.json()
     else:
         print(f"Error: {response.status_code} - {response.text}")
-    print(f"]] {end_point}")
+        return {"Error": response.status_code, "Reason": response.text}
 
 
 @timing_decorator
 def a2f_get(end_point, data=None):
+    print(f"++ {end_point}")
     api_url = f"{A2F_BASE_URL}/{end_point}"
     response = requests.get(api_url, json=data)
     if response.status_code == 200:
         print(response.json())
+        return response.json()
     else:
         print(f"Error: {response.status_code} - {response.text}")
+        return {"Error": response.status_code, "Reason": response.text}
 
 
 def a2f_player_setlooping(flag=True):
@@ -119,6 +129,22 @@ def a2f_player_settrack(file_name):
 
 def a2f_player_gettracks():
     a2f_post("A2F/Player/GetTracks", {"a2f_player": A2F_PLAYER})
+
+
+def a2f_player_gettime():
+    response = a2f_post("A2F/Player/GetTime", {"a2f_player": A2F_PLAYER})
+    if response["status"] == "OK":
+        return response["result"]
+    else:
+        return 0
+
+
+def a2f_player_getrange():
+    response = a2f_post("A2F/Player/GetRange", {"a2f_player": A2F_PLAYER})
+    if response["status"] == "OK":
+        return response["result"]["work"]
+    else:
+        return (0, 0)
 
 
 def a2f_generatekeys():
@@ -146,8 +172,22 @@ def a2f_setup():
     a2f_enable_audio_stream(True)
 
 
-def a2f_test():
-    a2f_player_test()
+@timing_decorator
+def run_pipeline(answer):
+    print(answer)
+    mp3_file = text_to_mp3(answer)
+    wav_file = mp3_to_wav(mp3_file)
+    duration = a2f_player_getrange()[1]
+    position = a2f_player_gettime()
+    while position > 0 and position < duration:
+        time.sleep(1)
+        position = a2f_player_gettime()
+        print("z")
+    a2f_player_setrootpath(CWD)
+    a2f_player_settrack(wav_file)
+    a2f_generatekeys()
+
+    a2f_player_play()
 
 
 @timing_decorator
@@ -156,17 +196,25 @@ def get_completion(chat_history):
         model=CHAT_MODEL_NAME,
         messages=chat_history,
         api_base=CHAT_BASE_URL,
+        stream=CHAT_STREAMING,
     )
-
-    # response = client.chat.completions.create(
-    #     model="gpt-3.5-turbo",
-    #     messages=history_openai_format,
-    #     temperature=1.0,
-    #     stream=False,
-    # )
 
     print(response)
     return response
+
+
+mutex = threading.Lock()
+q = queue.Queue()
+
+
+def pipeline_worker():
+    while True:
+        print("--------------------------")
+        item = q.get()
+        print(f"Working on {item}")
+        run_pipeline(item)
+        print(f"Finished {item}")
+        q.task_done()
 
 
 def predict(message, history):
@@ -193,28 +241,61 @@ def predict(message, history):
         history_openai_format.append({"role": "assistant", "content": assistant})
     history_openai_format.append({"role": "user", "content": message})
 
+    start_time = time.time()
     response = get_completion(history_openai_format)
     yield ".."
 
-    if len(response.choices[0].message.content) != 0:
+    while not q.empty():
+        # cleanup pending A2F tasks
+        q.task_done()
+
+    if CHAT_STREAMING:
+        # create variables to collect the stream of chunks
+        collected_chunks = []  # UNUSED
+        collected_messages = []
+        complete_sentences = ""
+        # iterate through the stream of events
+        for chunk in response:
+            chunk_time = (
+                time.time() - start_time
+            )  # calculate the time delay of the chunk
+            collected_chunks.append(chunk)  # save the event response
+            chunk_message = chunk.choices[0].delta.content  # extract the message
+            collected_messages.append(chunk_message)  # save the message
+            print(
+                f"Message received {chunk_time:.2f} seconds after request: {chunk_message}"
+            )  # print the delay and text
+
+            if chunk_message in [".", "!", "?", "。", "!", "？"]:
+                one_sentence = "".join([m for m in collected_messages if m is not None])
+                collected_messages = []
+                complete_sentences += one_sentence
+                q.put(one_sentence)
+                # run_pipeline(one_sentence)
+                yield complete_sentences
+
+        # print the time delay and text received
+        # print(f"Full response received {chunk_time:.2f} seconds after request")
+        # # clean None in collected_messages
+        # collected_messages = [m for m in collected_messages if m is not None]
+        # full_reply_content = "".join([m for m in collected_messages])
+        # print(f"Full conversation received: {full_reply_content}")
+        # yield full_reply_content
+    else:
+        if len(response.choices[0].message.content) == 0:
+            return
+
         answer = response.choices[0].message.content
         yield answer
 
-        mp3_file = text_to_mp3(answer)
-        wav_file = mp3_to_wav(mp3_file)
-        yield "....\n" + answer
-
-        a2f_player_settrack(wav_file)
-        yield "......\n" + answer
-
-        a2f_generatekeys()
-        yield "........\n" + answer
-
-        a2f_player_play()
-        yield "..........\n" + answer
+        run_pipeline(answer)
 
 
 if __name__ == "__main__":
+    threading.Thread(target=pipeline_worker, daemon=True).start()
+
     a2f_setup()
     gr.ChatInterface(predict).queue().launch()
     # a2f_player_pause()
+
+    q.join()
