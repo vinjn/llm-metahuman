@@ -185,7 +185,7 @@ def run_pipeline(answer):
         print("z")
     a2f_player_setrootpath(CWD)
     a2f_player_settrack(wav_file)
-    a2f_generatekeys()
+    # a2f_generatekeys()
 
     a2f_player_play()
 
