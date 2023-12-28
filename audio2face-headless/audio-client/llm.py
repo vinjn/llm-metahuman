@@ -40,7 +40,7 @@ model = "tts-1-hd"
 voice = "alloy"
 model = "tts-1"
 
-voice = "fable"
+voice = "nova"
 
 client = OpenAI()
 
@@ -245,7 +245,7 @@ def predict(message, history):
     response = get_completion(history_openai_format)
     yield ".."
 
-    while not q.empty():
+    while q.qsize() > 2:
         # cleanup pending A2F tasks
         q.task_done()
 
