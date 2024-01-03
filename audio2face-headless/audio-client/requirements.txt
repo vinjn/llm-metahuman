@@ -3,3 +3,4 @@ pydub
 gradio
 requests
 litellm
+pyttsx3

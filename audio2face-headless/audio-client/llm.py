@@ -40,7 +40,7 @@ model = "tts-1-hd"
 voice = "alloy"
 model = "tts-1"
 
-voice = "nova"
+voice = "shimmer"
 
 client = OpenAI()
 
@@ -174,18 +174,22 @@ def a2f_setup():
 
 @timing_decorator
 def run_pipeline(answer):
+    global stop_current_a2f
     print(answer)
     mp3_file = text_to_mp3(answer)
     wav_file = mp3_to_wav(mp3_file)
     duration = a2f_player_getrange()[1]
     position = a2f_player_gettime()
     while position > 0 and position < duration:
+        if stop_current_a2f:
+            stop_current_a2f = False
+            break
         time.sleep(1)
         position = a2f_player_gettime()
         print("z")
     a2f_player_setrootpath(CWD)
     a2f_player_settrack(wav_file)
-    # a2f_generatekeys()
+    a2f_generatekeys()
 
     a2f_player_play()
 
@@ -203,14 +207,30 @@ def get_completion(chat_history):
     return response
 
 
-mutex = threading.Lock()
 q = queue.Queue()
+cleanup_queue = False
+stop_current_a2f = False
 
 
 def pipeline_worker():
     while True:
         print("--------------------------")
+        global cleanup_queue
+        global stop_current_a2f
+        if cleanup_queue:
+            while not q.empty():
+                item = q.get()
+                q.task_done()
+
+                if item == "cleanup_queue_token":
+                    break
+            cleanup_queue = False
+            stop_current_a2f = True
+
         item = q.get()
+        if item == "cleanup_queue_token":
+            continue
+
         print(f"Working on {item}")
         run_pipeline(item)
         print(f"Finished {item}")
@@ -245,9 +265,9 @@ def predict(message, history):
     response = get_completion(history_openai_format)
     yield ".."
 
-    while q.qsize() > 2:
-        # cleanup pending A2F tasks
-        q.task_done()
+    global cleanup_queue
+    cleanup_queue = True
+    q.put("cleanup_queue_token")
 
     if CHAT_STREAMING:
         # create variables to collect the stream of chunks
