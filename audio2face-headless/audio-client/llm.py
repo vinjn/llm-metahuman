@@ -165,11 +165,53 @@ def a2f_enable_audio_stream(flag=True):
     )
 
 
+def a2f_get_preprocessing():
+    response = a2f_post(
+        "A2F/PRE/GetSettings",
+        {"a2f_instance": A2F_INSTANCE},
+    )
+    if response["status"] == "OK":
+        return response["result"]
+    else:
+        return {}
+
+
+def a2f_set_preprocessing(settings):
+    settings["a2f_instance"] = A2F_INSTANCE
+    a2f_post("A2F/PRE/SetSettings", settings)
+
+
+def a2f_get_postprocessing():
+    response = a2f_post(
+        "A2F/POST/GetSettings",
+        {"a2f_instance": A2F_INSTANCE},
+    )
+    if response["status"] == "OK":
+        return response["result"]
+    else:
+        return {}
+
+
+def a2f_set_postprocessing(settings):
+    a2f_post(
+        "A2F/POST/SetSettings", {"a2f_instance": A2F_INSTANCE, "settings": settings}
+    )
+
+
 def a2f_setup():
     a2f_player_setrootpath(CWD)
     a2f_ActivateStreamLivelink()
     a2f_player_setlooping(False)
     a2f_enable_audio_stream(True)
+
+    pre_settings = a2f_get_preprocessing()
+    pre_settings["prediction_delay"] = 0
+    pre_settings["blink_interval"] = 1.5
+    a2f_set_preprocessing(pre_settings)
+
+    post_settings = a2f_get_postprocessing()
+    post_settings["skin_strength"] = 1.3
+    a2f_set_postprocessing(post_settings)
 
 
 @timing_decorator
@@ -187,10 +229,11 @@ def run_pipeline(answer):
         time.sleep(1)
         position = a2f_player_gettime()
         print("z")
-    a2f_player_setrootpath(CWD)
+    # a2f_player_setrootpath(CWD)
     a2f_player_settrack(wav_file)
-    a2f_generatekeys()
+    # a2f_generatekeys()
 
+    time.sleep(1)
     a2f_player_play()
 
 
@@ -271,7 +314,7 @@ def predict(message, history):
 
     if CHAT_STREAMING:
         # create variables to collect the stream of chunks
-        collected_chunks = []  # UNUSED
+        UNUSED_collected_chunks = []
         collected_messages = []
         complete_sentences = ""
         # iterate through the stream of events
@@ -279,15 +322,20 @@ def predict(message, history):
             chunk_time = (
                 time.time() - start_time
             )  # calculate the time delay of the chunk
-            collected_chunks.append(chunk)  # save the event response
+            UNUSED_collected_chunks.append(chunk)  # save the event response
             chunk_message = chunk.choices[0].delta.content  # extract the message
+
             collected_messages.append(chunk_message)  # save the message
             print(
                 f"Message received {chunk_time:.2f} seconds after request: {chunk_message}"
             )  # print the delay and text
 
-            if chunk_message in [".", "!", "?", "。", "!", "？"]:
+            # if chunk_message in [".", "!", "?", "。", "!", "？"]:
+            if not chunk_message or "\n" in chunk_message:
                 one_sentence = "".join([m for m in collected_messages if m is not None])
+                if len(one_sentence) < 10:
+                    # ignore short sentences
+                    continue
                 collected_messages = []
                 complete_sentences += one_sentence
                 q.put(one_sentence)
