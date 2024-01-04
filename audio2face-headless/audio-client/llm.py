@@ -82,28 +82,34 @@ def mp3_to_wav(mp3_filename):
 
 
 @timing_decorator
-def a2f_post(end_point, data=None):
-    print(f"++ {end_point}")
+def a2f_post(end_point, data=None, verbose=True):
+    if verbose:
+        print(f"++ {end_point}")
     api_url = f"{A2F_BASE_URL}/{end_point}"
     response = requests.post(api_url, json=data)
     if response.status_code == 200:
-        print(response.json())
+        if verbose:
+            print(response.json())
         return response.json()
     else:
-        print(f"Error: {response.status_code} - {response.text}")
+        if verbose:
+            print(f"Error: {response.status_code} - {response.text}")
         return {"Error": response.status_code, "Reason": response.text}
 
 
 @timing_decorator
-def a2f_get(end_point, data=None):
-    print(f"++ {end_point}")
+def a2f_get(end_point, data=None, verbose=True):
+    if verbose:
+        print(f"++ {end_point}")
     api_url = f"{A2F_BASE_URL}/{end_point}"
     response = requests.get(api_url, json=data)
     if response.status_code == 200:
-        print(response.json())
+        if verbose:
+            print(response.json())
         return response.json()
     else:
-        print(f"Error: {response.status_code} - {response.text}")
+        if verbose:
+            print(f"Error: {response.status_code} - {response.text}")
         return {"Error": response.status_code, "Reason": response.text}
 
 
@@ -132,7 +138,7 @@ def a2f_player_gettracks():
 
 
 def a2f_player_gettime():
-    response = a2f_post("A2F/Player/GetTime", {"a2f_player": A2F_PLAYER})
+    response = a2f_post("A2F/Player/GetTime", {"a2f_player": A2F_PLAYER}, False)
     if response["status"] == "OK":
         return response["result"]
     else:
@@ -140,7 +146,7 @@ def a2f_player_gettime():
 
 
 def a2f_player_getrange():
-    response = a2f_post("A2F/Player/GetRange", {"a2f_player": A2F_PLAYER})
+    response = a2f_post("A2F/Player/GetRange", {"a2f_player": A2F_PLAYER}, False)
     if response["status"] == "OK":
         return response["result"]["work"]
     else:
@@ -217,19 +223,21 @@ def a2f_setup():
 @timing_decorator
 def run_pipeline(answer):
     global stop_current_a2f
-    print(answer)
+    # print(answer)
     mp3_file = text_to_mp3(answer)
     wav_file = mp3_to_wav(mp3_file)
     duration = a2f_player_getrange()[1]
     position = a2f_player_gettime()
     while position > 0 and position < duration:
+        print(position)
         if stop_current_a2f:
+            print("stop_current_a2f")
             stop_current_a2f = False
             break
         time.sleep(1)
         position = a2f_player_gettime()
         print("z")
-    # a2f_player_setrootpath(CWD)
+    a2f_player_setrootpath(CWD)
     a2f_player_settrack(wav_file)
     # a2f_generatekeys()
 
@@ -308,9 +316,10 @@ def predict(message, history):
     response = get_completion(history_openai_format)
     yield ".."
 
-    global cleanup_queue
-    cleanup_queue = True
-    q.put("cleanup_queue_token")
+    if False:
+        global cleanup_queue
+        cleanup_queue = True
+        q.put("cleanup_queue_token")
 
     if CHAT_STREAMING:
         # create variables to collect the stream of chunks
@@ -326,12 +335,21 @@ def predict(message, history):
             chunk_message = chunk.choices[0].delta.content  # extract the message
 
             collected_messages.append(chunk_message)  # save the message
-            print(
-                f"Message received {chunk_time:.2f} seconds after request: {chunk_message}"
-            )  # print the delay and text
+            # print(
+            #     f"Message {chunk_time:.2f} s after request: {chunk_message}"
+            # )  # print the delay and text
+            print(chunk_message)
 
-            # if chunk_message in [".", "!", "?", "。", "!", "？"]:
-            if not chunk_message or "\n" in chunk_message:
+            if chunk_message == "stop":
+                global cleanup_queue
+                cleanup_queue = True
+                q.put("cleanup_queue_token")
+
+            if chunk_message:
+                chunk_message = chunk_message.rstrip("\n")
+
+            if chunk_message in [".", "!", "?", "。", "!", "？"]:
+                # if not chunk_message or "\n" in chunk_message:
                 one_sentence = "".join([m for m in collected_messages if m is not None])
                 if len(one_sentence) < 10:
                     # ignore short sentences
