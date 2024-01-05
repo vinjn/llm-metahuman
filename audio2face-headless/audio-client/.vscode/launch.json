@@ -5,13 +5,23 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Python: Current File",
+            "name": "default",
             "type": "python",
             "request": "launch",
             "program": "${file}",
             "console": "integratedTerminal",
-            "args": ["LoseYourself.mp3" ,"/World/audio2face/PlayerStreaming"],
+            "args": [],
+            "justMyCode": false
+        },
+        {
+            "name": "8012 alloy",
+            "type": "python",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "args": ["--a2f_url=http://localhost:8012", "--tts_voice=alloy"],
             "justMyCode": false
         }
+
     ]
 }
