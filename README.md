@@ -1,6 +1,6 @@
-# llm metahuman
+# LLM MetaHuman
 
-An open solution for AI-powered photorealistic digital humans.
+LLM MetaHuman is an open solution for AI-powered photorealistic digital humans.
 
 ## Preparation steps
 
