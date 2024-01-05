@@ -169,14 +169,14 @@ def a2f_generatekeys():
     a2f_post("A2F/A2E/GenerateKeys", {"a2f_instance": args.a2f_instance_id})
 
 
-def a2f_ActivateStreamLivelink(flag=True):
+def a2f_ActivateStreamLivelink(flag):
     a2f_post(
         "A2F/Exporter/ActivateStreamLivelink",
         {"node_path": args.a2f_livelink_id, "value": flag},
     )
 
 
-def a2f_IsStreamLivelinkConnected(flag=True):
+def a2f_IsStreamLivelinkConnected():
     response = a2f_post(
         "A2F/Exporter/IsStreamLivelinkConnected",
         {"node_path": args.a2f_livelink_id},
@@ -187,10 +187,30 @@ def a2f_IsStreamLivelinkConnected(flag=True):
         return False
 
 
-def a2f_enable_audio_stream(flag=True):
+def a2f_enable_audio_stream(flag):
     a2f_post(
         "A2F/Exporter/SetStreamLivelinkSettings",
         {"node_path": args.a2f_livelink_id, "values": {"enable_audio_stream": flag}},
+    )
+
+
+def a2f_set_livelink_ports(
+    livelink_host,
+    livelink_subject,
+    livelink_port,
+    audio_port,
+):
+    a2f_post(
+        "A2F/Exporter/SetStreamLivelinkSettings",
+        {
+            "node_path": args.a2f_livelink_id,
+            "values": {
+                "livelink_host": livelink_host,
+                "livelink_subject": livelink_subject,
+                "livelink_port": livelink_port,
+                "audio_port": audio_port,
+            },
+        },
     )
 
 
@@ -233,12 +253,16 @@ def a2f_setup():
     # try it :)
     A2F_SERVICE_HEALTHY = True
 
-    a2f_ActivateStreamLivelink()
+    a2f_ActivateStreamLivelink(True)
     LIVELINK_SERVICE_HEALTHY = a2f_IsStreamLivelinkConnected()
 
     a2f_player_setrootpath(CWD)
     a2f_player_setlooping(False)
     a2f_enable_audio_stream(True)
+
+    a2f_set_livelink_ports(
+        args.livelink_host, args.livelink_subject, args.livelink_port, args.audio_port
+    )
 
     pre_settings = a2f_get_preprocessing()
     pre_settings["prediction_delay"] = 0
@@ -278,7 +302,10 @@ def run_pipeline(answer):
     a2f_player_play()
 
     for file in files_to_delete:
-        os.remove(file)
+        try:
+            os.remove(file)
+        except Exception:
+            pass
     files_to_delete.clear()
 
     files_to_delete.append(mp3_file)
@@ -438,6 +465,11 @@ if __name__ == "__main__":
 
     parser.add_argument("--tts_model", choices=["tts-1", "tts-1-hd"], default="tts-1")
     parser.add_argument("--tts_speed", type=float, default=1.1)
+
+    parser.add_argument("--livelink_host", default="localhost")
+    parser.add_argument("--livelink_subject", default="Audio2Face")
+    parser.add_argument("--livelink_port", type=int, default=12030)
+    parser.add_argument("--audio_port", type=int, default=12031)
 
     parser.add_argument(
         "--tts_voice",

@@ -14,12 +14,12 @@
             "justMyCode": false
         },
         {
-            "name": "8012 alloy",
+            "name": "8012 12040 12041",
             "type": "python",
             "request": "launch",
             "program": "${file}",
             "console": "integratedTerminal",
-            "args": ["--a2f_url=http://localhost:8012", "--tts_voice=alloy"],
+            "args": ["--a2f_url=http://localhost:8012", "--tts_voice=alloy", "--livelink_host=localhost", "--livelink_subject=Audio2Face-2", "--livelink_port=12040","--audio_port=12041"],
             "justMyCode": false
         }
 
