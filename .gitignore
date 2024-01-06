@@ -135,5 +135,4 @@ _*/
 *.usd
 *.mp4
 *.download
-audio2face-headless/audio-client/litellm_uuid.txt
-audio2face-headless/audio-client/flagged/log.csv
+*_uuid.txt

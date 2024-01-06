@@ -7,6 +7,8 @@ from litellm import completion
 import time
 import threading
 import queue
+from gradio_client import Client
+
 
 # XXX: increase requests speed
 # https://stackoverflow.com/a/72440253
@@ -20,14 +22,13 @@ print("CWD:", CWD)
 A2F_SERVICE_HEALTHY = False
 LIVELINK_SERVICE_HEALTHY = False
 
-client = OpenAI()
+openai_client = OpenAI()
+gr_client: Client = None
+chat_ui: gr.ChatInterface = None
 
 
 def timing_decorator(func):
     def wrapper(*args, **kwargs):
-        if not A2F_SERVICE_HEALTHY:
-            return None
-
         start_time = time.time()
         result = func(*args, **kwargs)
         end_time = time.time()
@@ -40,7 +41,7 @@ def timing_decorator(func):
 
 @timing_decorator
 def text_to_mp3(text):
-    response = client.audio.speech.create(
+    response = openai_client.audio.speech.create(
         model=args.tts_model,
         voice=args.tts_voice,
         speed=args.tts_speed,
@@ -279,6 +280,9 @@ files_to_delete = []
 
 @timing_decorator
 def run_pipeline(answer):
+    if not A2F_SERVICE_HEALTHY:
+        return
+
     global stop_current_a2f_play
     # print(answer)
     mp3_file = text_to_mp3(answer)
@@ -315,10 +319,10 @@ def run_pipeline(answer):
 @timing_decorator
 def get_completion(chat_history):
     response = completion(
-        model=args.chat_model,
+        model=args.llm_model,
         messages=chat_history,
-        api_base=args.chat_url,
-        stream=args.chat_streaming,
+        api_base=args.llm_url,
+        stream=args.llm_streaming,
     )
 
     print(response)
@@ -349,10 +353,23 @@ def pipeline_worker():
         if item == "cleanup_queue_token":
             continue
 
-        print(f"Working on {item}")
+        print(f"Begin: {item}")
         run_pipeline(item)
-        print(f"Finished {item}")
+        print(f"End: {item}")
         q.task_done()
+
+
+def talk_to_peer(message):
+    if not gr_client:
+        return
+
+    result = gr_client.predict(
+        message, api_name="/chat"  # str  in 'Message' Textbox component
+    )
+    print(f"from peer: {result}")
+
+    # chat_ui.textbox.submit(None, [result, result])
+    # chat_ui.textbox.submit()
 
 
 def predict(message, history):
@@ -380,6 +397,18 @@ def predict(message, history):
         yield "stopped"
         return
 
+    if message.startswith("peer"):
+        items = message.split()
+        if len(items) >= 2:
+            gradio_port = int(items[1])
+            # TODO: support non localhost
+            args.gradio_peer_url = f"http://localhost:{gradio_port}/"
+            global gr_client
+            gr_client = Client(args.gradio_peer_url)
+
+            yield f"I will chat with another llm-metahuman: {args.gradio_peer_url}"
+        return
+
     history_openai_format = []
     for human, assistant in history:
         history_openai_format.append({"role": "user", "content": human})
@@ -394,7 +423,7 @@ def predict(message, history):
     # cleanup_queue = True
     # q.put("cleanup_queue_token")
 
-    if args.chat_streaming:
+    if args.llm_streaming:
         # create variables to collect the stream of chunks
         UNUSED_collected_chunks = []
         collected_messages = []
@@ -426,7 +455,10 @@ def predict(message, history):
                 complete_sentences += one_sentence
                 q.put(one_sentence)
                 # run_pipeline(one_sentence)
+
                 yield complete_sentences
+
+                talk_to_peer(one_sentence)
 
         # print the time delay and text received
         # print(f"Full response received {chunk_time:.2f} seconds after request")
@@ -445,27 +477,38 @@ def predict(message, history):
         run_pipeline(answer)
 
 
-if __name__ == "__main__":
+def main():
     import argparse
 
     parser = argparse.ArgumentParser(description="llm.py arguments")
 
-    parser.add_argument("--chat_engine", choices=["gpt", "llama2"], default="gpt")
+    # gradio settings
+    parser.add_argument("--gradio_port", type=int, default=7860)
     parser.add_argument(
-        "--chat_model", default=None, help="https://docs.litellm.ai/docs/providers"
+        "--gradio_peer_url",
+        default=None,
+        help="the gradio peer that this gradio instance will chat with. Default value is None, which means chat with a human.",
     )
-    parser.add_argument("--chat_url", default=None)
 
-    parser.add_argument("--chat_streaming", default=True)
+    # llm / litellm settings
+    parser.add_argument("--llm_engine", choices=["gpt", "llama2"], default="gpt")
+    parser.add_argument(
+        "--llm_model", default=None, help="https://docs.litellm.ai/docs/providers"
+    )
+    parser.add_argument("--llm_url", default=None)
+    parser.add_argument("--llm_streaming", default=True)
 
+    # audio2face settings
     parser.add_argument("--a2f_url", default="http://localhost:8011")
     parser.add_argument("--a2f_instance_id", default="/World/audio2face/CoreFullface")
     parser.add_argument("--a2f_player_id", default="/World/audio2face/Player")
     parser.add_argument("--a2f_livelink_id", default="/World/audio2face/StreamLivelink")
 
+    # tts settings
     parser.add_argument("--tts_model", choices=["tts-1", "tts-1-hd"], default="tts-1")
     parser.add_argument("--tts_speed", type=float, default=1.1)
 
+    # livelink settings
     parser.add_argument("--livelink_host", default="localhost")
     parser.add_argument("--livelink_subject", default="Audio2Face")
     parser.add_argument("--livelink_port", type=int, default=12030)
@@ -478,18 +521,31 @@ if __name__ == "__main__":
         help="https://platform.openai.com/docs/guides/text-to-speech",
     )
 
+    global args
     args = parser.parse_args()
 
-    if not args.chat_model:
-        if args.chat_engine == "gpt":
-            args.chat_model = args.chat_model or "gpt-3.5-turbo"
-        elif args.chat_engine == "llama2":
-            args.chat_model = args.chat_model or "ollama/llama2"
-            args.chat_url = args.chat_url or "http://localhost:11434"
+    if not args.llm_model:
+        if args.llm_engine == "gpt":
+            args.llm_model = args.llm_model or "gpt-3.5-turbo"
+        elif args.llm_engine == "llama2":
+            args.llm_model = args.llm_model or "ollama/llama2"
+            args.llm_url = args.llm_url or "http://localhost:11434"
 
     threading.Thread(target=pipeline_worker, daemon=True).start()
 
     a2f_setup()
-    gr.ChatInterface(predict).queue().launch()
+
+    global chat_ui
+    chat_ui = gr.ChatInterface(
+        predict,
+        title=f"llm-metahuman @{args.gradio_port}",
+        examples=["hello", "tell me 3 jokes", "what's the meaning of life?"],
+    )
+
+    chat_ui.queue().launch(server_port=args.gradio_port)
 
     q.join()
+
+
+if __name__ == "__main__":
+    main()

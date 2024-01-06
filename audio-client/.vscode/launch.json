@@ -8,18 +8,18 @@
             "name": "default",
             "type": "python",
             "request": "launch",
-            "program": "${file}",
+            "program": "${workspaceFolder}/llm.py",
             "console": "integratedTerminal",
             "args": [],
             "justMyCode": false
         },
         {
-            "name": "8012 12040 12041",
+            "name": "gradio_7861 a2f_8012 livelink_12040",
             "type": "python",
             "request": "launch",
-            "program": "${file}",
+            "program": "${workspaceFolder}/llm.py",
             "console": "integratedTerminal",
-            "args": ["--a2f_url=http://localhost:8012", "--tts_voice=alloy", "--livelink_host=localhost", "--livelink_subject=Audio2Face-2", "--livelink_port=12040","--audio_port=12041"],
+            "args": ["--gradio_port=7861", "--a2f_url=http://localhost:8012", "--tts_voice=alloy", "--livelink_host=localhost", "--livelink_subject=Audio2Face-2", "--livelink_port=12040","--audio_port=12041"],
             "justMyCode": false
         }
 
