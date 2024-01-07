@@ -7,7 +7,7 @@ from litellm import completion
 import time
 import threading
 import queue
-from gradio_client import Client
+import gradio_client as gc
 
 
 # XXX: increase requests speed
@@ -18,13 +18,6 @@ parser = None
 
 CWD = os.getcwd()
 print("CWD:", CWD)
-
-A2F_SERVICE_HEALTHY = False
-LIVELINK_SERVICE_HEALTHY = False
-
-openai_client = OpenAI()
-gr_client: Client = None
-chat_ui: gr.ChatInterface = None
 
 
 def timing_decorator(func):
@@ -37,6 +30,262 @@ def timing_decorator(func):
         return result
 
     return wrapper
+
+
+class A2fInstance:
+    def __init__(self) -> None:
+        self.SERVICE_HEALTHY = False
+        self.LIVELINK_SERVICE_HEALTHY = False
+        A2fInstance.files_to_delete = []
+
+    @timing_decorator
+    def post(self, end_point, data=None, verbose=True):
+        if not self.SERVICE_HEALTHY:
+            return None
+
+        if verbose:
+            print(f"++ {end_point}")
+        api_url = f"{args.a2f_url}/{end_point}"
+        try:
+            response = requests.post(api_url, json=data)
+
+            if response and response.status_code == 200:
+                if verbose:
+                    print(response.json())
+                return response.json()
+            else:
+                if verbose:
+                    print(f"Error: {response.status_code} - {response.text}")
+                return {"Error": response.status_code, "Reason": response.text}
+        except Exception as e:
+            print(e)
+            self.SERVICE_HEALTHY = False
+            return None
+
+    @timing_decorator
+    def get(self, end_point, data=None, verbose=True):
+        if not self.SERVICE_HEALTHY:
+            return None
+
+        if verbose:
+            print(f"++ {end_point}")
+        api_url = f"{args.a2f_url}/{end_point}"
+
+        try:
+            response = requests.get(api_url, json=data)
+            if response.status_code == 200:
+                if verbose:
+                    print(response.json())
+                return response.json()
+            else:
+                if verbose:
+                    print(f"Error: {response.status_code} - {response.text}")
+                return {"Error": response.status_code, "Reason": response.text}
+        except Exception as e:
+            print(e)
+            self.SERVICE_HEALTHY = False
+            return None
+
+    def player_setlooping(self, flag=True):
+        self.post(
+            "A2F/Player/SetLooping",
+            {"a2f_player": args.a2f_player_id, "loop_audio": flag},
+        )
+
+    def player_play(self):
+        self.post("A2F/Player/Play", {"a2f_player": args.a2f_player_id})
+
+    def player_pause(self):
+        self.post("A2F/Player/Pause", {"a2f_player": args.a2f_player_id})
+
+    def player_setrootpath(self, dir_path):
+        self.post(
+            "A2F/Player/SetRootPath",
+            {"a2f_player": args.a2f_player_id, "dir_path": dir_path},
+        )
+
+    def player_settrack(self, file_name):
+        self.post(
+            "A2F/Player/SetTrack",
+            {"a2f_player": args.a2f_player_id, "file_name": file_name},
+        )
+
+    def player_gettracks(self):
+        self.post("A2F/Player/GetTracks", {"a2f_player": args.a2f_player_id})
+
+    def player_gettime(self):
+        response = self.post(
+            "A2F/Player/GetTime", {"a2f_player": args.a2f_player_id}, False
+        )
+        if response and response["status"] == "OK":
+            return response["result"]
+        else:
+            return 0
+
+    def player_getrange(self):
+        response = self.post(
+            "A2F/Player/GetRange", {"a2f_player": args.a2f_player_id}, False
+        )
+        if response and response["status"] == "OK":
+            return response["result"]["work"]
+        else:
+            return (0, 0)
+
+    def generatekeys(self):
+        self.post("A2F/A2E/GenerateKeys", {"a2f_instance": args.a2f_instance_id})
+
+    def ActivateStreamLivelink(self, flag):
+        self.post(
+            "A2F/Exporter/ActivateStreamLivelink",
+            {"node_path": args.a2f_livelink_id, "value": flag},
+        )
+
+    def IsStreamLivelinkConnected(self):
+        response = self.post(
+            "A2F/Exporter/IsStreamLivelinkConnected",
+            {"node_path": args.a2f_livelink_id},
+        )
+        if response and response["status"] == "OK":
+            return response["result"]
+        else:
+            return False
+
+    def enable_audio_stream(self, flag):
+        self.post(
+            "A2F/Exporter/SetStreamLivelinkSettings",
+            {
+                "node_path": args.a2f_livelink_id,
+                "values": {"enable_audio_stream": flag},
+            },
+        )
+
+    def set_livelink_ports(
+        self,
+        livelink_host,
+        livelink_subject,
+        livelink_port,
+        audio_port,
+    ):
+        self.post(
+            "A2F/Exporter/SetStreamLivelinkSettings",
+            {
+                "node_path": args.a2f_livelink_id,
+                "values": {
+                    "livelink_host": livelink_host,
+                    "livelink_subject": livelink_subject,
+                    "livelink_port": livelink_port,
+                    "audio_port": audio_port,
+                },
+            },
+        )
+
+    def get_preprocessing(self):
+        response = self.post(
+            "A2F/PRE/GetSettings",
+            {"a2f_instance": args.a2f_instance_id},
+        )
+        if response and response["status"] == "OK":
+            return response["result"]
+        else:
+            return {}
+
+    def set_preprocessing(self, settings):
+        settings["a2f_instance"] = args.a2f_instance_id
+        self.post("A2F/PRE/SetSettings", settings)
+
+    def get_postprocessing(self):
+        response = self.post(
+            "A2F/POST/GetSettings",
+            {"a2f_instance": args.a2f_instance_id},
+        )
+        if response and response["status"] == "OK":
+            return response["result"]
+        else:
+            return {}
+
+    def set_postprocessing(self, settings):
+        self.post(
+            "A2F/POST/SetSettings",
+            {"a2f_instance": args.a2f_instance_id, "settings": settings},
+        )
+
+    def setup(self):
+        # try it :)
+        self.SERVICE_HEALTHY = True
+
+        self.ActivateStreamLivelink(True)
+        if not self.SERVICE_HEALTHY:
+            return
+
+        self.player_setrootpath(CWD)
+        self.player_setlooping(False)
+
+        self.LIVELINK_SERVICE_HEALTHY = self.IsStreamLivelinkConnected()
+        if not self.LIVELINK_SERVICE_HEALTHY:
+            return
+
+        self.enable_audio_stream(True)
+
+        self.set_livelink_ports(
+            args.livelink_host,
+            args.livelink_subject,
+            args.livelink_port,
+            args.audio_port,
+        )
+
+        pre_settings = self.get_preprocessing()
+        pre_settings["prediction_delay"] = 0
+        pre_settings["blink_interval"] = 1.5
+        self.set_preprocessing(pre_settings)
+
+        post_settings = self.get_postprocessing()
+        post_settings["skin_strength"] = 1.3
+        self.set_postprocessing(post_settings)
+
+
+a2f_instances = []
+openai_client = OpenAI()
+gc_client: gc.Client = None
+chat_ui: gr.ChatInterface = None
+
+
+@timing_decorator
+def run_pipeline(answer):
+    for a2f in a2f_instances:
+        if not a2f.SERVICE_HEALTHY:
+            return
+
+    global stop_current_a2f_play
+    # print(answer)
+    mp3_file = text_to_mp3(answer)
+    wav_file = mp3_to_wav(mp3_file)
+    duration = a2f.player_getrange()[1]
+    position = a2f.player_gettime()
+    while position > 0 and position < duration:
+        print(position)
+        if stop_current_a2f_play:
+            print("stop_current_a2f_play")
+            stop_current_a2f_play = False
+            return
+
+        time.sleep(1)
+        position = a2f.player_gettime()
+        print("z")
+    a2f.player_setrootpath(CWD)
+    a2f.player_settrack(wav_file)
+    # a2f_generatekeys()
+
+    a2f.player_play()
+
+    for file in A2fInstance.files_to_delete:
+        try:
+            os.remove(file)
+        except Exception:
+            pass
+    A2fInstance.files_to_delete.clear()
+
+    A2fInstance.files_to_delete.append(mp3_file)
+    A2fInstance.files_to_delete.append(wav_file)
 
 
 @timing_decorator
@@ -62,258 +311,6 @@ def mp3_to_wav(mp3_filename):
     sound.export(wav_filename, format="wav")
 
     return wav_filename
-
-
-@timing_decorator
-def a2f_post(end_point, data=None, verbose=True):
-    global A2F_SERVICE_HEALTHY
-
-    if not A2F_SERVICE_HEALTHY:
-        return None
-
-    if verbose:
-        print(f"++ {end_point}")
-    api_url = f"{args.a2f_url}/{end_point}"
-    try:
-        response = requests.post(api_url, json=data)
-
-        if response and response.status_code == 200:
-            if verbose:
-                print(response.json())
-            return response.json()
-        else:
-            if verbose:
-                print(f"Error: {response.status_code} - {response.text}")
-            return {"Error": response.status_code, "Reason": response.text}
-    except Exception as e:
-        print(e)
-        A2F_SERVICE_HEALTHY = False
-
-
-@timing_decorator
-def a2f_get(end_point, data=None, verbose=True):
-    global A2F_SERVICE_HEALTHY
-
-    if not A2F_SERVICE_HEALTHY:
-        return None
-
-    if verbose:
-        print(f"++ {end_point}")
-    api_url = f"{args.a2f_url}/{end_point}"
-
-    try:
-        response = requests.get(api_url, json=data)
-        if response.status_code == 200:
-            if verbose:
-                print(response.json())
-            return response.json()
-        else:
-            if verbose:
-                print(f"Error: {response.status_code} - {response.text}")
-            return {"Error": response.status_code, "Reason": response.text}
-    except Exception as e:
-        print(e)
-        return None
-
-
-def a2f_player_setlooping(flag=True):
-    a2f_post(
-        "A2F/Player/SetLooping", {"a2f_player": args.a2f_player_id, "loop_audio": flag}
-    )
-
-
-def a2f_player_play():
-    a2f_post("A2F/Player/Play", {"a2f_player": args.a2f_player_id})
-
-
-def a2f_player_pause():
-    a2f_post("A2F/Player/Pause", {"a2f_player": args.a2f_player_id})
-
-
-def a2f_player_setrootpath(dir_path):
-    a2f_post(
-        "A2F/Player/SetRootPath",
-        {"a2f_player": args.a2f_player_id, "dir_path": dir_path},
-    )
-
-
-def a2f_player_settrack(file_name):
-    a2f_post(
-        "A2F/Player/SetTrack",
-        {"a2f_player": args.a2f_player_id, "file_name": file_name},
-    )
-
-
-def a2f_player_gettracks():
-    a2f_post("A2F/Player/GetTracks", {"a2f_player": args.a2f_player_id})
-
-
-def a2f_player_gettime():
-    response = a2f_post("A2F/Player/GetTime", {"a2f_player": args.a2f_player_id}, False)
-    if response and response["status"] == "OK":
-        return response["result"]
-    else:
-        return 0
-
-
-def a2f_player_getrange():
-    response = a2f_post(
-        "A2F/Player/GetRange", {"a2f_player": args.a2f_player_id}, False
-    )
-    if response and response["status"] == "OK":
-        return response["result"]["work"]
-    else:
-        return (0, 0)
-
-
-def a2f_generatekeys():
-    a2f_post("A2F/A2E/GenerateKeys", {"a2f_instance": args.a2f_instance_id})
-
-
-def a2f_ActivateStreamLivelink(flag):
-    a2f_post(
-        "A2F/Exporter/ActivateStreamLivelink",
-        {"node_path": args.a2f_livelink_id, "value": flag},
-    )
-
-
-def a2f_IsStreamLivelinkConnected():
-    response = a2f_post(
-        "A2F/Exporter/IsStreamLivelinkConnected",
-        {"node_path": args.a2f_livelink_id},
-    )
-    if response and response["status"] == "OK":
-        return response["result"]
-    else:
-        return False
-
-
-def a2f_enable_audio_stream(flag):
-    a2f_post(
-        "A2F/Exporter/SetStreamLivelinkSettings",
-        {"node_path": args.a2f_livelink_id, "values": {"enable_audio_stream": flag}},
-    )
-
-
-def a2f_set_livelink_ports(
-    livelink_host,
-    livelink_subject,
-    livelink_port,
-    audio_port,
-):
-    a2f_post(
-        "A2F/Exporter/SetStreamLivelinkSettings",
-        {
-            "node_path": args.a2f_livelink_id,
-            "values": {
-                "livelink_host": livelink_host,
-                "livelink_subject": livelink_subject,
-                "livelink_port": livelink_port,
-                "audio_port": audio_port,
-            },
-        },
-    )
-
-
-def a2f_get_preprocessing():
-    response = a2f_post(
-        "A2F/PRE/GetSettings",
-        {"a2f_instance": args.a2f_instance_id},
-    )
-    if response and response["status"] == "OK":
-        return response["result"]
-    else:
-        return {}
-
-
-def a2f_set_preprocessing(settings):
-    settings["a2f_instance"] = args.a2f_instance_id
-    a2f_post("A2F/PRE/SetSettings", settings)
-
-
-def a2f_get_postprocessing():
-    response = a2f_post(
-        "A2F/POST/GetSettings",
-        {"a2f_instance": args.a2f_instance_id},
-    )
-    if response and response["status"] == "OK":
-        return response["result"]
-    else:
-        return {}
-
-
-def a2f_set_postprocessing(settings):
-    a2f_post(
-        "A2F/POST/SetSettings",
-        {"a2f_instance": args.a2f_instance_id, "settings": settings},
-    )
-
-
-def a2f_setup():
-    global A2F_SERVICE_HEALTHY, LIVELINK_SERVICE_HEALTHY
-    # try it :)
-    A2F_SERVICE_HEALTHY = True
-
-    a2f_ActivateStreamLivelink(True)
-    LIVELINK_SERVICE_HEALTHY = a2f_IsStreamLivelinkConnected()
-
-    a2f_player_setrootpath(CWD)
-    a2f_player_setlooping(False)
-    a2f_enable_audio_stream(True)
-
-    a2f_set_livelink_ports(
-        args.livelink_host, args.livelink_subject, args.livelink_port, args.audio_port
-    )
-
-    pre_settings = a2f_get_preprocessing()
-    pre_settings["prediction_delay"] = 0
-    pre_settings["blink_interval"] = 1.5
-    a2f_set_preprocessing(pre_settings)
-
-    post_settings = a2f_get_postprocessing()
-    post_settings["skin_strength"] = 1.3
-    a2f_set_postprocessing(post_settings)
-
-
-files_to_delete = []
-
-
-@timing_decorator
-def run_pipeline(answer):
-    if not A2F_SERVICE_HEALTHY:
-        return
-
-    global stop_current_a2f_play
-    # print(answer)
-    mp3_file = text_to_mp3(answer)
-    wav_file = mp3_to_wav(mp3_file)
-    duration = a2f_player_getrange()[1]
-    position = a2f_player_gettime()
-    while position > 0 and position < duration:
-        print(position)
-        if stop_current_a2f_play:
-            print("stop_current_a2f_play")
-            stop_current_a2f_play = False
-            return
-
-        time.sleep(1)
-        position = a2f_player_gettime()
-        print("z")
-    a2f_player_setrootpath(CWD)
-    a2f_player_settrack(wav_file)
-    # a2f_generatekeys()
-
-    a2f_player_play()
-
-    for file in files_to_delete:
-        try:
-            os.remove(file)
-        except Exception:
-            pass
-    files_to_delete.clear()
-
-    files_to_delete.append(mp3_file)
-    files_to_delete.append(wav_file)
 
 
 @timing_decorator
@@ -360,10 +357,10 @@ def pipeline_worker():
 
 
 def talk_to_peer(message):
-    if not gr_client:
+    if not gc_client:
         return
 
-    result = gr_client.predict(
+    result = gc_client.predict(
         message, api_name="/chat"  # str  in 'Message' Textbox component
     )
     print(f"from peer: {result}")
@@ -375,18 +372,23 @@ def talk_to_peer(message):
 def predict(message, history):
     print("==========================")
     if message == "setup":
-        a2f_setup()
-        yield f"A2F running: {A2F_SERVICE_HEALTHY}\nLive Link running: {LIVELINK_SERVICE_HEALTHY}"
+        str = ""
+        for a2f in a2f_instances:
+            a2f.setup()
+            str += f"A2F running: {a2f.SERVICE_HEALTHY}\nLive Link running: {a2f.LIVELINK_SERVICE_HEALTHY}"
+        yield str
         return
 
     if message == "ping":
-        a2f_post("")
-        a2f_get("")
+        for a2f in a2f_instances:
+            a2f.post("")
+            a2f.get("")
         yield "A2F ping"
         return
 
     if message == "redo":
-        a2f_player_play()
+        for a2f in a2f_instances:
+            a2f.player_play()
         yield "A2F redo"
         return
 
@@ -403,8 +405,8 @@ def predict(message, history):
             gradio_port = int(items[1])
             # TODO: support non localhost
             args.gradio_peer_url = f"http://localhost:{gradio_port}/"
-            global gr_client
-            gr_client = Client(args.gradio_peer_url)
+            global gc_client
+            gc_client = gc.Client(args.gradio_peer_url)
 
             yield f"I will chat with another llm-metahuman: {args.gradio_peer_url}"
         return
@@ -483,6 +485,7 @@ def main():
     parser = argparse.ArgumentParser(description="llm.py arguments")
 
     # gradio settings
+    parser.add_argument("--a2f_instance_count", type=int, default=1)
     parser.add_argument("--gradio_port", type=int, default=7860)
     parser.add_argument(
         "--gradio_peer_url",
@@ -533,7 +536,11 @@ def main():
 
     threading.Thread(target=pipeline_worker, daemon=True).start()
 
-    a2f_setup()
+    for i in range(args.a2f_instance_count):
+        global a2f_instances
+        a2f = A2fInstance()
+        a2f.setup()
+        a2f_instances.append(a2f)
 
     global chat_ui
     chat_ui = gr.ChatInterface(

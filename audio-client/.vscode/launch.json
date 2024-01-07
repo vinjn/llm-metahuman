@@ -5,6 +5,14 @@
     "version": "0.2.0",
     "configurations": [
         {
+            "name": "Python: Current File",
+            "type": "python",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "justMyCode": true
+        },
+        {
             "name": "default",
             "type": "python",
             "request": "launch",
@@ -19,9 +27,16 @@
             "request": "launch",
             "program": "${workspaceFolder}/llm.py",
             "console": "integratedTerminal",
-            "args": ["--gradio_port=7861", "--a2f_url=http://localhost:8012", "--tts_voice=alloy", "--livelink_host=localhost", "--livelink_subject=Audio2Face-2", "--livelink_port=12040","--audio_port=12041"],
+            "args": [
+                "--gradio_port=7861",
+                "--a2f_url=http://localhost:8012",
+                "--tts_voice=alloy",
+                "--livelink_host=localhost",
+                "--livelink_subject=Audio2Face-2",
+                "--livelink_port=12040",
+                "--audio_port=12041"
+            ],
             "justMyCode": false
         }
-
     ]
 }
