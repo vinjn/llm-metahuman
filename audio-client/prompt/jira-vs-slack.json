@@ -1,0 +1,19 @@
+{
+    "task": "Write a stand-up comedy script with 10 dialogs",
+    "characters": [
+        {
+            "title": "Software Engineer",
+            "name": "Alloy",
+            "preference": "Email",
+            "description": "Enthusiastic software engineer"
+        },
+        {
+            "title": "Program Manager",
+            "name": "Nova",
+            "preference": "Slack",
+            "description": "Organized program manager"
+        }
+    ],
+    "topic": "Argument about email vs Slack",
+    "format": "A: says something in one line. B: says something in one line. Remove the number."
+}

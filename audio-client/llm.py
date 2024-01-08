@@ -14,10 +14,12 @@ import gradio_client as gc
 # https://stackoverflow.com/a/72440253
 requests.packages.urllib3.util.connection.HAS_IPV6 = False
 
-parser = None
+args = None
 
 CWD = os.getcwd()
 print("CWD:", CWD)
+
+VOICE_ACTORS = ["nova", "alloy", "echo", "fable", "onyx", "shimmer"]
 
 
 def timing_decorator(func):
@@ -33,10 +35,13 @@ def timing_decorator(func):
 
 
 class A2fInstance:
-    def __init__(self) -> None:
+    files_to_delete = []
+    instaces = []
+
+    def __init__(self, index) -> None:
         self.SERVICE_HEALTHY = False
         self.LIVELINK_SERVICE_HEALTHY = False
-        A2fInstance.files_to_delete = []
+        self.index = index
 
     @timing_decorator
     def post(self, end_point, data=None, verbose=True):
@@ -45,7 +50,7 @@ class A2fInstance:
 
         if verbose:
             print(f"++ {end_point}")
-        api_url = f"{args.a2f_url}/{end_point}"
+        api_url = f"{self.base_url}/{end_point}"
         try:
             response = requests.post(api_url, json=data)
 
@@ -69,7 +74,7 @@ class A2fInstance:
 
         if verbose:
             print(f"++ {end_point}")
-        api_url = f"{args.a2f_url}/{end_point}"
+        api_url = f"{self.base_url}/{end_point}"
 
         try:
             response = requests.get(api_url, json=data)
@@ -210,7 +215,13 @@ class A2fInstance:
         )
 
     def setup(self):
-        # try it :)
+        self.base_url = f"http://{args.a2f_host}:{args.a2f_port+self.index}"
+        self.tts_voice = args.tts_voice
+        if self.index > 1:
+            # TODO: make it elegant
+            self.tts_voice = VOICE_ACTORS[self.index % len(VOICE_ACTORS)]
+
+        # always ping SERVICE_HEALTHY again in setup()
         self.SERVICE_HEALTHY = True
 
         self.ActivateStreamLivelink(True)
@@ -229,8 +240,8 @@ class A2fInstance:
         self.set_livelink_ports(
             args.livelink_host,
             args.livelink_subject,
-            args.livelink_port,
-            args.audio_port,
+            args.livelink_port + 10 * self.index,
+            args.audio_port + 10 * self.index,
         )
 
         pre_settings = self.get_preprocessing()
@@ -243,21 +254,17 @@ class A2fInstance:
         self.set_postprocessing(post_settings)
 
 
-a2f_instances = []
+A2fInstance.instaces = []
 openai_client = OpenAI()
 gc_client: gc.Client = None
 chat_ui: gr.ChatInterface = None
 
 
-@timing_decorator
-def run_pipeline(answer):
-    for a2f in a2f_instances:
-        if not a2f.SERVICE_HEALTHY:
-            return
-
+def run_single_pipeline(a2f, answer):
     global stop_current_a2f_play
+
     # print(answer)
-    mp3_file = text_to_mp3(answer)
+    mp3_file = text_to_mp3(answer, a2f.tts_voice)
     wav_file = mp3_to_wav(mp3_file)
     duration = a2f.player_getrange()[1]
     position = a2f.player_gettime()
@@ -289,10 +296,23 @@ def run_pipeline(answer):
 
 
 @timing_decorator
-def text_to_mp3(text):
+def run_pipeline(answer):
+    if args.a2f_instance_count == 1:
+        run_single_pipeline(A2fInstance.instaces[0], answer)
+        return
+
+    for a2f in A2fInstance.instaces:
+        if not a2f.SERVICE_HEALTHY:
+            return
+
+        print("z")
+
+
+@timing_decorator
+def text_to_mp3(text, voice):
     response = openai_client.audio.speech.create(
         model=args.tts_model,
-        voice=args.tts_voice,
+        voice=voice,
         speed=args.tts_speed,
         input=text,
     )
@@ -373,21 +393,21 @@ def predict(message, history):
     print("==========================")
     if message == "setup":
         str = ""
-        for a2f in a2f_instances:
+        for a2f in A2fInstance.instaces:
             a2f.setup()
             str += f"A2F running: {a2f.SERVICE_HEALTHY}\nLive Link running: {a2f.LIVELINK_SERVICE_HEALTHY}"
         yield str
         return
 
     if message == "ping":
-        for a2f in a2f_instances:
+        for a2f in A2fInstance.instaces:
             a2f.post("")
             a2f.get("")
         yield "A2F ping"
         return
 
     if message == "redo":
-        for a2f in a2f_instances:
+        for a2f in A2fInstance.instaces:
             a2f.player_play()
         yield "A2F redo"
         return
@@ -404,7 +424,7 @@ def predict(message, history):
         if len(items) >= 2:
             gradio_port = int(items[1])
             # TODO: support non localhost
-            args.gradio_peer_url = f"http://localhost:{gradio_port}/"
+            args.gradio_peer_url = f"http://{args.gradio_host}:{gradio_port}/"
             global gc_client
             gc_client = gc.Client(args.gradio_peer_url)
 
@@ -417,7 +437,7 @@ def predict(message, history):
         history_openai_format.append({"role": "assistant", "content": assistant})
     history_openai_format.append({"role": "user", "content": message})
 
-    start_time = time.time()
+    # start_time = time.time()
     response = get_completion(history_openai_format)
     yield ".."
 
@@ -432,9 +452,9 @@ def predict(message, history):
         complete_sentences = ""
         # iterate through the stream of events
         for chunk in response:
-            chunk_time = (
-                time.time() - start_time
-            )  # calculate the time delay of the chunk
+            # chunk_time = (
+            #     time.time() - start_time
+            # )  # calculate the time delay of the chunk
             UNUSED_collected_chunks.append(chunk)  # save the event response
             chunk_message = chunk.choices[0].delta.content  # extract the message
 
@@ -486,6 +506,7 @@ def main():
 
     # gradio settings
     parser.add_argument("--a2f_instance_count", type=int, default=1)
+    parser.add_argument("--gradio_host", default="localhost")
     parser.add_argument("--gradio_port", type=int, default=7860)
     parser.add_argument(
         "--gradio_peer_url",
@@ -494,33 +515,36 @@ def main():
     )
 
     # llm / litellm settings
-    parser.add_argument("--llm_engine", choices=["gpt", "llama2"], default="gpt")
+    parser.add_argument("--llm_engine", default="gpt", choices=["gpt", "llama2"])
     parser.add_argument(
         "--llm_model", default=None, help="https://docs.litellm.ai/docs/providers"
     )
     parser.add_argument("--llm_url", default=None)
-    parser.add_argument("--llm_streaming", default=True)
+    parser.add_argument(
+        "--llm_streaming", default=True, action=argparse.BooleanOptionalAction
+    )
 
     # audio2face settings
-    parser.add_argument("--a2f_url", default="http://localhost:8011")
+    parser.add_argument("--a2f_host", default="localhost")
+    parser.add_argument("--a2f_port", default=8011, type=int)
     parser.add_argument("--a2f_instance_id", default="/World/audio2face/CoreFullface")
     parser.add_argument("--a2f_player_id", default="/World/audio2face/Player")
     parser.add_argument("--a2f_livelink_id", default="/World/audio2face/StreamLivelink")
 
     # tts settings
-    parser.add_argument("--tts_model", choices=["tts-1", "tts-1-hd"], default="tts-1")
-    parser.add_argument("--tts_speed", type=float, default=1.1)
+    parser.add_argument("--tts_model", default="tts-1", choices=["tts-1", "tts-1-hd"])
+    parser.add_argument("--tts_speed", default=1.1, type=float)
 
     # livelink settings
     parser.add_argument("--livelink_host", default="localhost")
+    parser.add_argument("--livelink_port", default=12030, type=int)
     parser.add_argument("--livelink_subject", default="Audio2Face")
-    parser.add_argument("--livelink_port", type=int, default=12030)
-    parser.add_argument("--audio_port", type=int, default=12031)
+    parser.add_argument("--livelink_audio_port", default=12031, type=int)
 
     parser.add_argument(
         "--tts_voice",
-        choices=["alloy", "echo", "fable", "onyx", "nova", "shimmer"],
         default="nova",
+        choices=VOICE_ACTORS,
         help="https://platform.openai.com/docs/guides/text-to-speech",
     )
 
@@ -537,10 +561,9 @@ def main():
     threading.Thread(target=pipeline_worker, daemon=True).start()
 
     for i in range(args.a2f_instance_count):
-        global a2f_instances
-        a2f = A2fInstance()
+        a2f = A2fInstance(i)
         a2f.setup()
-        a2f_instances.append(a2f)
+        A2fInstance.instaces.append(a2f)
 
     global chat_ui
     chat_ui = gr.ChatInterface(
@@ -549,7 +572,7 @@ def main():
         examples=["hello", "tell me 3 jokes", "what's the meaning of life?"],
     )
 
-    chat_ui.queue().launch(server_port=args.gradio_port)
+    chat_ui.queue().launch(server_name=args.gradio_host, server_port=args.gradio_port)
 
     q.join()
 

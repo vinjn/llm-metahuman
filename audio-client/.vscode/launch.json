@@ -13,6 +13,18 @@
             "justMyCode": true
         },
         {
+            "name": "two metahumans",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/llm.py",
+            "console": "integratedTerminal",
+            "args": [
+                "--a2f_instance_count=2",
+                "--llm_streaming"
+            ],
+            "justMyCode": true
+        },
+        {
             "name": "default",
             "type": "python",
             "request": "launch",
@@ -32,9 +44,9 @@
                 "--a2f_url=http://localhost:8012",
                 "--tts_voice=alloy",
                 "--livelink_host=localhost",
-                "--livelink_subject=Audio2Face-2",
+                "--livelink_subject=Audio2Face-1",
                 "--livelink_port=12040",
-                "--audio_port=12041"
+                "--livelink_audio_port=12041"
             ],
             "justMyCode": false
         }
