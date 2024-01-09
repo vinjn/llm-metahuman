@@ -169,7 +169,7 @@ class A2fInstance:
         livelink_host,
         livelink_subject,
         livelink_port,
-        audio_port,
+        livelink_audio_port,
     ):
         self.post(
             "A2F/Exporter/SetStreamLivelinkSettings",
@@ -179,7 +179,7 @@ class A2fInstance:
                     "livelink_host": livelink_host,
                     "livelink_subject": livelink_subject,
                     "livelink_port": livelink_port,
-                    "audio_port": audio_port,
+                    "audio_port": livelink_audio_port,
                 },
             },
         )
@@ -217,7 +217,7 @@ class A2fInstance:
     def setup(self):
         self.base_url = f"http://{args.a2f_host}:{args.a2f_port+self.index}"
         self.tts_voice = args.tts_voice
-        if self.index > 1:
+        if self.index > 0:
             # TODO: make it elegant
             self.tts_voice = VOICE_ACTORS[self.index % len(VOICE_ACTORS)]
 
@@ -239,9 +239,9 @@ class A2fInstance:
 
         self.set_livelink_ports(
             args.livelink_host,
-            args.livelink_subject,
+            f"{args.livelink_subject}-{self.index}",
             args.livelink_port + 10 * self.index,
-            args.audio_port + 10 * self.index,
+            args.livelink_audio_port + 10 * self.index,
         )
 
         pre_settings = self.get_preprocessing()
@@ -260,24 +260,28 @@ gc_client: gc.Client = None
 chat_ui: gr.ChatInterface = None
 
 
-def run_single_pipeline(a2f, answer):
+def run_single_pipeline(a2f, answer, a2f_peer=None):
     global stop_current_a2f_play
+
+    if not a2f_peer:
+        a2f_peer = a2f
 
     # print(answer)
     mp3_file = text_to_mp3(answer, a2f.tts_voice)
     wav_file = mp3_to_wav(mp3_file)
-    duration = a2f.player_getrange()[1]
-    position = a2f.player_gettime()
+    duration = a2f_peer.player_getrange()[1]
+    position = a2f_peer.player_gettime()
     while position > 0 and position < duration:
-        print(position)
+        print(position, duration)
         if stop_current_a2f_play:
             print("stop_current_a2f_play")
             stop_current_a2f_play = False
             return
 
         time.sleep(1)
-        position = a2f.player_gettime()
+        position = a2f_peer.player_gettime()
         print("z")
+    time.sleep(1)
     a2f.player_setrootpath(CWD)
     a2f.player_settrack(wav_file)
     # a2f_generatekeys()
@@ -295,17 +299,33 @@ def run_single_pipeline(a2f, answer):
     A2fInstance.files_to_delete.append(wav_file)
 
 
+current_speaker = -1
+
+
 @timing_decorator
 def run_pipeline(answer):
     if args.a2f_instance_count == 1:
         run_single_pipeline(A2fInstance.instaces[0], answer)
         return
 
-    for a2f in A2fInstance.instaces:
-        if not a2f.SERVICE_HEALTHY:
-            return
+    global current_speaker
+    if answer.startswith("("):
+        current_speaker = -1
+    elif answer.startswith("A:"):
+        current_speaker = 0
+        answer = answer[2:]
+    elif answer.startswith("B:"):
+        current_speaker = 1
+        answer = answer[2:]
 
-        print("z")
+    if current_speaker < 0 or current_speaker >= args.a2f_instance_count:
+        return
+
+    a2f = A2fInstance.instaces[current_speaker]
+    if not a2f.SERVICE_HEALTHY:
+        return
+
+    run_single_pipeline(a2f, answer)
 
 
 @timing_decorator
@@ -395,7 +415,8 @@ def predict(message, history):
         str = ""
         for a2f in A2fInstance.instaces:
             a2f.setup()
-            str += f"A2F running: {a2f.SERVICE_HEALTHY}\nLive Link running: {a2f.LIVELINK_SERVICE_HEALTHY}"
+            str += f"A2F running: {a2f.SERVICE_HEALTHY}\n"
+            str += f"Live Link running: {a2f.LIVELINK_SERVICE_HEALTHY}\n"
         yield str
         return
 
@@ -458,16 +479,23 @@ def predict(message, history):
             UNUSED_collected_chunks.append(chunk)  # save the event response
             chunk_message = chunk.choices[0].delta.content  # extract the message
 
+            if not chunk_message:
+                continue
+
             collected_messages.append(chunk_message)  # save the message
             # print(
             #     f"Message {chunk_time:.2f} s after request: {chunk_message}"
             # )  # print the delay and text
             print(chunk_message)
 
-            if chunk_message:
-                chunk_message = chunk_message.rstrip("\n")
-
-            if chunk_message in [".", "!", "?", "。", "!", "？"]:
+            if chunk_message in [
+                ".",
+                "!",
+                "?",
+                "。",
+                "!",
+                "？",
+            ] or chunk_message.endswith("\n"):
                 # if not chunk_message or "\n" in chunk_message:
                 one_sentence = "".join([m for m in collected_messages if m is not None])
                 if len(one_sentence) < 10:
