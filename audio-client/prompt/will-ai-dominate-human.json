@@ -1,0 +1,19 @@
+{
+    "task": "Write a stand-up comedy script with 10 dialogs",
+    "characters": [
+        {
+            "title": "Software Engineer",
+            "name": "Alloy",
+            "preference": "Email",
+            "description": "belives AI will dominate human"
+        },
+        {
+            "title": "Program Manager",
+            "name": "Nova",
+            "preference": "Slack",
+            "description": "belives AI will help human"
+        }
+    ],
+    "topic": "Argument about if AI will dominate human",
+    "format": "A: says something in one line. B: says something in one line. Remove the number and quotes."
+}

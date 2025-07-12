@@ -35,13 +35,14 @@ def timing_decorator(func):
 
 
 class A2fInstance:
-    files_to_delete = []
     instaces = []
 
     def __init__(self, index) -> None:
         self.SERVICE_HEALTHY = False
         self.LIVELINK_SERVICE_HEALTHY = False
         self.index = index
+        self.files_to_delete = []
+        self.first_talk = True
 
     @timing_decorator
     def post(self, end_point, data=None, verbose=True):
@@ -155,33 +156,24 @@ class A2fInstance:
         else:
             return False
 
-    def enable_audio_stream(self, flag):
-        self.post(
-            "A2F/Exporter/SetStreamLivelinkSettings",
-            {
-                "node_path": args.a2f_livelink_id,
-                "values": {"enable_audio_stream": flag},
-            },
+    def GetStreamLivelinkSettings(self):
+        response = self.post(
+            "A2F/Exporter/GetStreamLivelinkSettings",
+            {"node_path": args.a2f_livelink_id},
         )
+        if response and response["status"] == "OK":
+            return response["result"]
+        else:
+            return None
 
-    def set_livelink_ports(
+    def SetStreamLivelinkSettings(
         self,
-        livelink_host,
-        livelink_subject,
-        livelink_port,
-        livelink_audio_port,
+        settings,
     ):
+        settings["node_path"] = args.a2f_livelink_id
         self.post(
             "A2F/Exporter/SetStreamLivelinkSettings",
-            {
-                "node_path": args.a2f_livelink_id,
-                "values": {
-                    "livelink_host": livelink_host,
-                    "livelink_subject": livelink_subject,
-                    "livelink_port": livelink_port,
-                    "audio_port": livelink_audio_port,
-                },
-            },
+            {"node_path": args.a2f_livelink_id, "values": settings},
         )
 
     def get_preprocessing(self):
@@ -192,7 +184,7 @@ class A2fInstance:
         if response and response["status"] == "OK":
             return response["result"]
         else:
-            return {}
+            return None
 
     def set_preprocessing(self, settings):
         settings["a2f_instance"] = args.a2f_instance_id
@@ -206,7 +198,7 @@ class A2fInstance:
         if response and response["status"] == "OK":
             return response["result"]
         else:
-            return {}
+            return None
 
     def set_postprocessing(self, settings):
         self.post(
@@ -235,29 +227,35 @@ class A2fInstance:
         if not self.LIVELINK_SERVICE_HEALTHY:
             return
 
-        self.enable_audio_stream(True)
-
-        self.set_livelink_ports(
-            args.livelink_host,
-            f"{args.livelink_subject}-{self.index}",
-            args.livelink_port + 10 * self.index,
-            args.livelink_audio_port + 10 * self.index,
-        )
+        livelink_settings = self.GetStreamLivelinkSettings()
+        if livelink_settings:
+            livelink_settings["livelink_host"] = args.livelink_host
+            livelink_settings[
+                "livelink_subject"
+            ] = f"{args.livelink_subject}-{self.index}"
+            livelink_settings["livelink_port"] = args.livelink_port + 10 * self.index
+            livelink_settings["audio_port"] = args.livelink_audio_port + 10 * self.index
+            livelink_settings["enable_audio_stream"] = True
+            livelink_settings["enable_idle_face"] = True
+            self.SetStreamLivelinkSettings(livelink_settings)
 
         pre_settings = self.get_preprocessing()
-        pre_settings["prediction_delay"] = 0
-        pre_settings["blink_interval"] = 1.5
-        self.set_preprocessing(pre_settings)
+        if pre_settings:
+            pre_settings["prediction_delay"] = 0
+            pre_settings["blink_interval"] = 1.5
+            self.set_preprocessing(pre_settings)
 
         post_settings = self.get_postprocessing()
-        post_settings["skin_strength"] = 1.3
-        self.set_postprocessing(post_settings)
+        if post_settings:
+            post_settings["skin_strength"] = 1.3
+            self.set_postprocessing(post_settings)
 
 
 A2fInstance.instaces = []
 openai_client = OpenAI()
 gc_client: gc.Client = None
 chat_ui: gr.ChatInterface = None
+first_talk = True
 
 
 def run_single_pipeline(a2f, answer, a2f_peer=None):
@@ -271,7 +269,8 @@ def run_single_pipeline(a2f, answer, a2f_peer=None):
     wav_file = mp3_to_wav(mp3_file)
     duration = a2f_peer.player_getrange()[1]
     position = a2f_peer.player_gettime()
-    while position > 0 and position < duration:
+
+    while not a2f.first_talk and (position > 0 and position < duration):
         print(position, duration)
         if stop_current_a2f_play:
             print("stop_current_a2f_play")
@@ -281,22 +280,24 @@ def run_single_pipeline(a2f, answer, a2f_peer=None):
         time.sleep(1)
         position = a2f_peer.player_gettime()
         print("z")
-    time.sleep(1)
+
+    a2f.first_talk = False
+
     a2f.player_setrootpath(CWD)
     a2f.player_settrack(wav_file)
-    # a2f_generatekeys()
+    # a2f.generatekeys()
 
     a2f.player_play()
 
-    for file in A2fInstance.files_to_delete:
+    for file in a2f.files_to_delete:
         try:
             os.remove(file)
         except Exception:
             pass
-    A2fInstance.files_to_delete.clear()
+    a2f.files_to_delete.clear()
 
-    A2fInstance.files_to_delete.append(mp3_file)
-    A2fInstance.files_to_delete.append(wav_file)
+    a2f.files_to_delete.append(mp3_file)
+    a2f.files_to_delete.append(wav_file)
 
 
 current_speaker = -1
@@ -322,10 +323,11 @@ def run_pipeline(answer):
         return
 
     a2f = A2fInstance.instaces[current_speaker]
-    if not a2f.SERVICE_HEALTHY:
+    a2f_peer = A2fInstance.instaces[1 - current_speaker]
+    if not a2f.SERVICE_HEALTHY or not a2f_peer.SERVICE_HEALTHY:
         return
 
-    run_single_pipeline(a2f, answer)
+    run_single_pipeline(a2f, answer, a2f_peer)
 
 
 @timing_decorator
